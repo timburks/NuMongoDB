@@ -129,8 +129,8 @@ time_t bson_oid_generated_time(bson_oid_t* oid){
     time_t out;
     bson_big_endian32(&out, &oid->ints[0]);
     return out;
-}
 
+}
 void bson_print( bson * b ){
     bson_print_raw( b->data , 0 );
 }
@@ -139,6 +139,7 @@ void bson_print_raw( const char * data , int depth ){
     bson_iterator i;
     const char * key;
     int temp;
+    bson_timestamp_t ts;
     char oidhex[25];
     bson_iterator_init( &i , data );
 
@@ -147,7 +148,7 @@ void bson_print_raw( const char * data , int depth ){
         if ( t == 0 )
             break;
         key = bson_iterator_key( &i );
-        
+
         for ( temp=0; temp<=depth; temp++ )
             printf( "\t" );
         printf( "%s : %d \t " , key , t );
@@ -158,6 +159,10 @@ void bson_print_raw( const char * data , int depth ){
         case bson_string: printf( "%s" , bson_iterator_string( &i ) ); break;
         case bson_null: printf( "null" ); break;
         case bson_oid: bson_oid_to_string(bson_iterator_oid(&i), oidhex); printf( "%s" , oidhex ); break;
+        case bson_timestamp:
+            ts = bson_iterator_timestamp( &i );
+            printf("i: %d, t: %d", ts.i, ts.t);
+            break;
         case bson_object:
         case bson_array:
             printf( "\n" );
@@ -306,6 +311,13 @@ int64_t bson_iterator_long( const bson_iterator * i ){
     }
 }
 
+bson_timestamp_t bson_iterator_timestamp( const bson_iterator * i){
+    bson_timestamp_t ts;
+    bson_little_endian32(&(ts.i), bson_iterator_value(i));
+    bson_little_endian32(&(ts.t), bson_iterator_value(i) + 4);
+    return ts;
+}
+
 bson_bool_t bson_iterator_bool( const bson_iterator * i ){
     switch (bson_iterator_type(i)){
         case bson_bool: return bson_iterator_bool_raw(i);
@@ -353,14 +365,18 @@ time_t bson_iterator_time_t(const bson_iterator * i){
 }
 
 int bson_iterator_bin_len( const bson_iterator * i ){
-    return bson_iterator_int_raw( i );
+    return (bson_iterator_bin_type(i) == 2) 
+        ? bson_iterator_int_raw( i ) - 4
+        : bson_iterator_int_raw( i );
 }
 
 char bson_iterator_bin_type( const bson_iterator * i ){
     return bson_iterator_value(i)[4];
 }
 const char * bson_iterator_bin_data( const bson_iterator * i ){
-    return bson_iterator_value( i ) + 5;
+  return (bson_iterator_bin_type( i ) == 2) 
+    ? bson_iterator_value( i ) + 9
+    : bson_iterator_value( i ) + 5;
 }
 
 const char * bson_iterator_regex( const bson_iterator * i ){
@@ -520,10 +536,19 @@ bson_buffer * bson_append_code_w_scope( bson_buffer * b , const char * name , co
 }
 
 bson_buffer * bson_append_binary( bson_buffer * b, const char * name, char type, const char * str, int len ){
-    if ( ! bson_append_estart( b , bson_bindata , name , 4+1+len ) ) return 0;
-    bson_append32(b, &len);
-    bson_append_byte(b, type);
-    bson_append(b, str, len);
+    if ( type == 2 ){
+        int subtwolen = len + 4;
+        if ( ! bson_append_estart( b , bson_bindata , name , 4+1+4+len ) ) return 0;
+	bson_append32(b, &subtwolen);
+	bson_append_byte(b, type);
+	bson_append32(b, &len);
+	bson_append(b, str, len);  
+    }else{  
+        if ( ! bson_append_estart( b , bson_bindata , name , 4+1+len ) ) return 0;
+	bson_append32(b, &len);
+	bson_append_byte(b, type);
+	bson_append(b, str, len);
+    }
     return b;
 }
 bson_buffer * bson_append_oid( bson_buffer * b , const char * name , const bson_oid_t * oid ){
@@ -563,11 +588,19 @@ bson_buffer * bson_append_element( bson_buffer * b, const char * name_or_null, c
         bson_ensure_space(b, size);
         bson_append(b, elem->cur, size);
     }else{
-        int data_size = size - 1 - strlen(bson_iterator_key(elem));
+        int data_size = size - 2 - strlen(bson_iterator_key(elem));
         bson_append_estart(b, elem->cur[0], name_or_null, data_size);
-        bson_append(b, name_or_null, strlen(name_or_null));
         bson_append(b, bson_iterator_value(elem), data_size);
     }
+
+    return b;
+}
+
+bson_buffer * bson_append_timestamp( bson_buffer * b, const char * name, bson_timestamp_t * ts ){
+    if ( ! bson_append_estart( b , bson_timestamp , name , 8 ) ) return 0;
+
+    bson_append32( b , &(ts->i) );
+    bson_append32( b , &(ts->t) );
 
     return b;
 }
@@ -601,7 +634,7 @@ bson_buffer * bson_append_finish_object( bson_buffer * b ){
     int i;
     if ( ! bson_ensure_space( b , 1 ) ) return 0;
     bson_append_byte( b , 0 );
-    
+
     start = b->buf + b->stack[ --b->stackPos ];
     i = b->cur - start;
     bson_little_endian32(start, &i);
@@ -612,6 +645,12 @@ bson_buffer * bson_append_finish_object( bson_buffer * b ){
 void* bson_malloc(int size){
     void* p = malloc(size);
     bson_fatal_msg(!!p, "malloc() failed");
+    return p;
+}
+
+void* bson_realloc(void* ptr, int size){
+    void* p = realloc(ptr, size);
+    bson_fatal_msg(!!p, "realloc() failed");
     return p;
 }
 
