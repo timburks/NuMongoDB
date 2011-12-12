@@ -98,4 +98,7 @@ limitations under the License.
 /*! Close a database connection. */
 - (void) close;
 
+/*! Automatically record update times by inserting an _up NSDate with each update. */
++ (void) setEnableUpdateTimestamps:(BOOL) enable;
+
 @end
