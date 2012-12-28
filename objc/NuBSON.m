@@ -19,7 +19,7 @@
 - (id) initWithObjectIDPointer:(const bson_oid_t *) objectIDPointer;
 @end
 
-void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
+void add_object_to_bson_buffer(bson *bb, id key, id object)
 {
     const char *name = [key cStringUsingEncoding:NSUTF8StringEncoding];
     Class NuCell = NSClassFromString(@"NuCell");
@@ -55,7 +55,7 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
         }
     }
     else if ([object isKindOfClass:[NSDictionary class]]) {
-        bson_buffer *sub = bson_append_start_object(bb, name);
+        bson *sub = bson_append_start_object(bb, name);
         id keys = [object allKeys];
         for (int i = 0; i < [keys count]; i++) {
             id key = [keys objectAtIndex:i];
@@ -64,7 +64,7 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
         bson_append_finish_object(sub);
     }
     else if ([object isKindOfClass:[NSArray class]]) {
-        bson_buffer *arr = bson_append_start_array(bb, name);
+        bson *arr = bson_append_start_array(bb, name);
         for (int i = 0; i < [object count]; i++) {
             add_object_to_bson_buffer(arr,
                 [[NSNumber numberWithInt:i] stringValue],
@@ -109,17 +109,17 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
 {
     bson_oid_t oid;
     bson_oid_gen(&oid);
-    return [[[NuBSONObjectID alloc] initWithObjectIDPointer:&oid] autorelease];
+    return [[NuBSONObjectID alloc] initWithObjectIDPointer:&oid];
 }
 
 + (NuBSONObjectID *) objectIDWithData:(NSData *) data
 {
-    return [[[NuBSONObjectID alloc] initWithData:data] autorelease];
+    return [[NuBSONObjectID alloc] initWithData:data];
 }
 
 + (NuBSONObjectID *) objectIDWithObjectIDPointer:(const bson_oid_t *) objectIDPointer
 {
-    return [[[NuBSONObjectID alloc] initWithObjectIDPointer:objectIDPointer] autorelease];
+    return [[NuBSONObjectID alloc] initWithObjectIDPointer:objectIDPointer];
 }
 
 - (id) initWithString:(NSString *) s
@@ -163,7 +163,7 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
 
 - (NSData *) dataRepresentation
 {
-    return [[[NSData alloc] initWithBytes:oid.bytes length:12] autorelease];
+    return [[NSData alloc] initWithBytes:oid.bytes length:12];
 }
 
 - (NSString *) description
@@ -203,7 +203,7 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
 
 + (NuBSON *) bsonWithData:(NSData *) data
 {
-    return [[[NuBSON alloc] initWithData:data] autorelease];
+    return [[NuBSON alloc] initWithData:data];
 }
 
 + (NSMutableArray *) bsonArrayWithData:(NSData *) data
@@ -211,12 +211,12 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
     NSMutableArray *results = [NSMutableArray array];
     bson bsonBuffer;
     bsonBuffer.data = (char *) [data bytes];
-    bsonBuffer.owned = NO;
+    //bsonBuffer.owned = NO;
     while (bson_size(&bsonBuffer)) {
         bson bsonValue;
         bson_copy(&bsonValue, &bsonBuffer);
         bsonBuffer.data += bson_size(&bsonValue);
-        NuBSON *bsonObject = [[[NuBSON alloc] initWithBSON:bsonValue] autorelease];
+        NuBSON *bsonObject = [[NuBSON alloc] initWithBSON:bsonValue];
         [results addObject:bsonObject];
     }
     bson_destroy(&bsonBuffer);
@@ -225,12 +225,12 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
 
 + (NuBSON *) bsonWithDictionary:(NSDictionary *) dictionary
 {
-    return [[[NuBSON alloc] initWithDictionary:dictionary] autorelease];
+    return [[NuBSON alloc] initWithDictionary:dictionary];
 }
 
 + (NuBSON *) bsonWithList:(id) list
 {
-    return [[[NuBSON alloc] initWithList:list] autorelease];
+    return [[NuBSON alloc] initWithList:list];
 }
 
 // internal, takes ownership of argument
@@ -246,7 +246,7 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
 {
     bson bsonBuffer;
     bsonBuffer.data = (char *) [data bytes];
-    bsonBuffer.owned = NO;
+    //bsonBuffer.owned = NO;
     bson_copy(&bsonValue, &bsonBuffer);
     bson_destroy(&bsonBuffer);
     return self;
@@ -254,30 +254,30 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
 
 - (NSData *) dataRepresentation
 {
-    return [[[NSData alloc]
+    return [[NSData alloc]
         initWithBytes:(bsonValue.data)
-        length:bson_size(&(bsonValue))] autorelease];
+        length:bson_size(&(bsonValue))];
 }
 
 - (NuBSON *) initWithDictionary:(NSDictionary *) dict
 {
     bson b;
-    bson_buffer bb;
-    bson_buffer_init(& bb );
+    bson bb;
+	bson_init(&bb);
     id keys = [dict allKeys];
     for (int i = 0; i < [keys count]; i++) {
         id key = [keys objectAtIndex:i];
         add_object_to_bson_buffer(&bb, key, [dict objectForKey:key]);
     }
-    bson_from_buffer(&b, &bb);
-    return [self initWithBSON:b];
+    bson_finish(&bb);
+    return [self initWithBSON:bb];
 }
 
 - (NuBSON *) initWithList:(id) cell
 {
     bson b;
-    bson_buffer bb;
-    bson_buffer_init(& bb );
+    bson bb;
+    bson_init(&bb);
     id cursor = cell;
     while (cursor && (cursor != [NSNull null])) {
         id key = [[cursor car] labelName];
@@ -285,14 +285,13 @@ void add_object_to_bson_buffer(bson_buffer *bb, id key, id object)
         add_object_to_bson_buffer(&bb, key, value);
         cursor = [[cursor cdr] cdr];
     }
-    bson_from_buffer(&b, &bb);
-    return [self initWithBSON:b];
+    bson_finish(&bb);
+    return [self initWithBSON:bb];
 }
 
 - (void) dealloc
 {
     bson_destroy(&bsonValue);
-    [super dealloc];
 }
 
 void dump_bson_iterator(bson_iterator it, const char *indent)
@@ -308,26 +307,26 @@ void dump_bson_iterator(bson_iterator it, const char *indent)
         char hex_oid[25];
 
         switch(bson_iterator_type(&it)) {
-            case bson_double:
+            case BSON_DOUBLE:
                 fprintf(stderr, "(double) %e\n", bson_iterator_double(&it));
                 break;
-            case bson_int:
+            case BSON_INT:
                 fprintf(stderr, "(int) %d\n", bson_iterator_int(&it));
                 break;
-            case bson_string:
+            case BSON_STRING:
                 fprintf(stderr, "(string) \"%s\"\n", bson_iterator_string(&it));
                 break;
-            case bson_oid:
+            case BSON_OID:
                 bson_oid_to_string(bson_iterator_oid(&it), hex_oid);
                 fprintf(stderr, "(oid) \"%s\"\n", hex_oid);
                 break;
-            case bson_object:
+            case BSON_OBJECT:
                 fprintf(stderr, "(subobject) {...}\n");
                 bson_iterator_subobject(&it, &subobject);
                 bson_iterator_init(&it2, subobject.data);
                 dump_bson_iterator(it2, more_indent);
                 break;
-            case bson_array:
+            case BSON_ARRAY:
                 fprintf(stderr, "(array) [...]\n");
                 bson_iterator_subobject(&it, &subobject);
                 bson_iterator_init(&it2, subobject.data);
@@ -351,23 +350,24 @@ void dump_bson_iterator(bson_iterator it, const char *indent)
 // When an unknown message is received by a NuBSON object, treat it as a call to objectForKey:
 - (id) handleUnknownMessage:(id) method withContext:(NSMutableDictionary *) context
 {
-    Class NuSymbol = NSClassFromString(@"NuSymbol");
-    id Nu__null = [NSNull null];
-    id cursor = method;
-    if (cursor && (cursor != Nu__null)) {
+	return NULL;
+//    Class NuSymbol = NSClassFromString(@"NuSymbol");
+//    id Nu__null = [NSNull null];
+//    id cursor = method;
+//    if (cursor && (cursor != Nu__null)) {
         // if the method is a label, use its value as the key.
-        if (NuSymbol && [[cursor car] isKindOfClass:[NuSymbol class]] && ([[cursor car] isLabel])) {
-            id result = [self objectForKey:[[cursor car] labelName]];
-            return result ? result : Nu__null;
-        }
-        else {
-            id result = [self objectForKey:[[cursor car] evalWithContext:context]];
-            return result ? result : Nu__null;
-        }
-    }
-    else {
-        return Nu__null;
-    }
+//        if (NuSymbol && [[cursor car] isKindOfClass:[NuSymbol class]] && ([[cursor car] isLabel])) {
+//            id result = [self objectForKey:[[cursor car] labelName]];
+ //           return result ? result : Nu__null;
+ //       }
+ //       else {
+ //           id result = [self objectForKey:[[cursor car] evalWithContext:context]];
+ //           return result ? result : Nu__null;
+ //       }
+ //   }
+ //   else {
+ //       return Nu__null;
+ //   }
 }
 
 void add_bson_to_object(bson_iterator it, id object, BOOL expandChildren);
@@ -380,17 +380,16 @@ id object_for_bson_iterator(bson_iterator it, BOOL expandChildren)
     bson subobject;
     char bintype;
     switch(bson_iterator_type(&it)) {
-        case bson_eoo:
+        case BSON_EOO:
             break;
-        case bson_double:
+        case BSON_DOUBLE:
             value = [NSNumber numberWithDouble:bson_iterator_double(&it)];
             break;
-        case bson_string:
-            value = [[[NSString alloc]
-                initWithCString:bson_iterator_string(&it) encoding:NSUTF8StringEncoding]
-                autorelease];
+        case BSON_STRING:
+            value = [[NSString alloc]
+                initWithCString:bson_iterator_string(&it) encoding:NSUTF8StringEncoding];
             break;
-        case bson_object:
+        case BSON_OBJECT:
             if (expandChildren) {
                 value = [NSMutableDictionary dictionary];
                 bson_iterator_subobject(&it, &subobject);
@@ -399,16 +398,16 @@ id object_for_bson_iterator(bson_iterator it, BOOL expandChildren)
             }
             else {
                 bson_iterator_subobject(&it, &subobject);
-                value = [[[NuBSON alloc] initWithBSON:subobject] autorelease];
+                value = [[NuBSON alloc] initWithBSON:subobject];
             }
             break;
-        case bson_array:
+        case BSON_ARRAY:
             value = [NSMutableArray array];
             bson_iterator_subobject(&it, &subobject);
             bson_iterator_init(&it2, subobject.data);
             add_bson_to_object(it2, value, expandChildren);
             break;
-        case bson_bindata:
+        case BSON_BINDATA:
             bintype = bson_iterator_bin_type(&it);
             value = [NSData
                 dataWithBytes:bson_iterator_bin_data(&it)
@@ -417,36 +416,35 @@ id object_for_bson_iterator(bson_iterator it, BOOL expandChildren)
                 value = [NSKeyedUnarchiver unarchiveObjectWithData:value];
             }
             break;
-        case bson_undefined:
+        case BSON_UNDEFINED:
             break;
-        case bson_oid:
-            value = [[[NuBSONObjectID alloc]
-                initWithObjectIDPointer:bson_iterator_oid(&it)]
-                autorelease];
+        case BSON_OID:
+            value = [[NuBSONObjectID alloc]
+                initWithObjectIDPointer:bson_iterator_oid(&it)];
             break;
-        case bson_bool:
+        case BSON_BOOL:
             value = [NSNumber numberWithBool:bson_iterator_bool(&it)];
             break;
-        case bson_date:
+        case BSON_DATE:
             value = [NSDate dateWithTimeIntervalSince1970:(0.001 * bson_iterator_date(&it))];
             break;
-        case bson_null:
+        case BSON_NULL:
             value = [NSNull null];
             break;
-        case bson_regex:
+        case BSON_REGEX:
             break;
-        case bson_code:
+        case BSON_CODE:
             break;
-        case bson_symbol:
+        case BSON_SYMBOL:
             break;
-        case bson_codewscope:
+        case BSON_CODEWSCOPE:
             break;
-        case bson_int:
+        case BSON_INT:
             value = [NSNumber numberWithInt:bson_iterator_int(&it)];
             break;
-        case bson_timestamp:
+        case BSON_TIMESTAMP:
             break;
-        case bson_long:
+        case BSON_LONG:
             value = [NSNumber numberWithLong:bson_iterator_long(&it)];
             break;
         default:
@@ -458,9 +456,8 @@ id object_for_bson_iterator(bson_iterator it, BOOL expandChildren)
 void add_bson_to_object(bson_iterator it, id object, BOOL expandChildren)
 {
     while(bson_iterator_next(&it)) {
-        NSString *key = [[[NSString alloc]
-            initWithCString:bson_iterator_key(&it) encoding:NSUTF8StringEncoding]
-            autorelease];
+        NSString *key = [[NSString alloc]
+            initWithCString:bson_iterator_key(&it) encoding:NSUTF8StringEncoding];
 
         id value = object_for_bson_iterator(it, expandChildren);
         if (value) {
@@ -482,7 +479,7 @@ void add_bson_to_object(bson_iterator it, id object, BOOL expandChildren)
 {
     id object = [NSMutableDictionary dictionary];
     bson_iterator it;
-    bson_iterator_init(&it, bsonValue.data);
+    bson_iterator_from_buffer(&it, bson_data(&(bsonValue)));
     add_bson_to_object(it, object, YES);
     return object;
 }
@@ -494,9 +491,8 @@ void add_bson_to_object(bson_iterator it, id object, BOOL expandChildren)
     bson_iterator_init(&it, bsonValue.data);
 
     while(bson_iterator_next(&it)) {
-        NSString *key = [[[NSString alloc]
-            initWithCString:bson_iterator_key(&it) encoding:NSUTF8StringEncoding]
-            autorelease];
+        NSString *key = [[NSString alloc]
+            initWithCString:bson_iterator_key(&it) encoding:NSUTF8StringEncoding];
         [result addObject:key];
     }
     return result;
@@ -553,7 +549,7 @@ bson *bson_for_object(id object)
         b = &(((NuBSON *)object)->bsonValue);
     }
     else if ([object isKindOfClass:[NSDictionary class]]) {
-        NuBSON *bsonObject = [[[NuBSON alloc] initWithDictionary:object] autorelease];
+        NuBSON *bsonObject = [[NuBSON alloc] initWithDictionary:object];
         b = &(bsonObject->bsonValue);
     }
     else {
@@ -568,7 +564,7 @@ bson *bson_for_object(id object)
 - (id) init
 {
     if (self = [super init]) {
-        bson_buffer_init(& bb );
+        bson_init(&bb);
     }
     return self;
 }
@@ -576,8 +572,8 @@ bson *bson_for_object(id object)
 - (NuBSON *) bsonValue
 {
     bson b;
-    bson_from_buffer(&b, &bb);
-    return [[[NuBSON alloc] initWithBSON:b] autorelease];
+    //bson_from_buffer(&b, &bb);
+    return [[NuBSON alloc] initWithBSON:bb];
 }
 
 - (void) addObject:(id) object withKey:(id) key
@@ -588,7 +584,8 @@ bson *bson_for_object(id object)
 // When an unknown message is received by a NuBSONBuffer, treat it as a call to addObject:withKey:
 - (id) handleUnknownMessage:(id) method withContext:(NSMutableDictionary *) context
 {
-    Class NuSymbol = NSClassFromString(@"NuSymbol");
+	return NULL;
+/*    Class NuSymbol = NSClassFromString(@"NuSymbol");
     id cursor = method;
     id Nu__null = [NSNull null];
     while (cursor && (cursor != Nu__null) && ([cursor cdr]) && ([cursor cdr] != Nu__null)) {
@@ -607,6 +604,7 @@ bson *bson_for_object(id object)
         cursor = [[cursor cdr] cdr];
     }
     return Nu__null;
+ */
 }
 
 @end
@@ -632,8 +630,8 @@ bson *bson_for_object(id object)
 
 + (NuBSONComparator *) comparatorWithBSONSpecification:(NuBSON *) s
 {
-    NuBSONComparator *comparator = [[[NuBSONComparator alloc] init] autorelease];
-    comparator->specification = [s retain];
+    NuBSONComparator *comparator = [[NuBSONComparator alloc] init];
+    comparator->specification = s;
     return comparator;
 }
 
@@ -641,12 +639,12 @@ bson *bson_for_object(id object)
 {
     bson bsonA;
     bsonA.data = aptr;
-    bsonA.owned = NO;
+    //bsonA.owned = NO;
     NuBSON *a = [[NuBSON alloc] initWithBSON:bsonA];
 
     bson bsonB;
     bsonB.data = bptr;
-    bsonB.owned = NO;
+    //bsonB.owned = NO;
     NuBSON *b = [[NuBSON alloc] initWithBSON:bsonB];
 
     bson_iterator it;
@@ -654,9 +652,8 @@ bson *bson_for_object(id object)
 
     int result = 0;
     while(bson_iterator_next(&it)) {
-        NSString *key = [[[NSString alloc]
-            initWithCString:bson_iterator_key(&it) encoding:NSUTF8StringEncoding]
-            autorelease];
+        NSString *key = [[NSString alloc]
+						  initWithCString:bson_iterator_key(&it) encoding:NSUTF8StringEncoding];
         id value = object_for_bson_iterator(it, NO);
         id a_value = [a objectForKey:key];
         id b_value = [b objectForKey:key];
@@ -664,8 +661,6 @@ bson *bson_for_object(id object)
         if (result != 0)
             break;
     }
-    [a release];
-    [b release];
     return result;
 }
 
