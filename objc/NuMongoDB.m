@@ -32,7 +32,7 @@
 
 - (NuBSON *) currentBSON
 {
-    return [[[NuBSON alloc] initWithBSON:cursor->current] autorelease];
+    return [[NuBSON alloc] initWithBSON:cursor->current];
 }
 
 - (NSDictionary *) currentObject
@@ -43,7 +43,7 @@
 - (void) dealloc
 {
     mongo_cursor_destroy(cursor);
-    [super dealloc];
+    
 }
 
 - (NSMutableArray *) arrayValue
@@ -78,24 +78,28 @@ static BOOL enableUpdateTimestamps = NO;
 
 - (int) connectWithOptions:(NSDictionary *) options
 {
-    id host = options ? [options objectForKey:@"host"] : nil;
-    if (host) {
-        strncpy(opts.host, [host cStringUsingEncoding:NSUTF8StringEncoding], 255);
-        opts.host[254] = '\0';
+	char *host = malloc(255);
+	int port;
+    id hostVal = options ? [options objectForKey:@"host"] : nil;
+    if (hostVal) {
+        strncpy(host, [hostVal cStringUsingEncoding:NSUTF8StringEncoding], 255);
+        host[254] = '\0';
     }
     else {
-        strncpy(opts.host, "127.0.0.1", 255);
-        opts.host[254] = '\0';
+        strncpy(host, "127.0.0.1", 255);
+        host[254] = '\0';
     }
-    id port = options ? [options objectForKey:@"port"] : nil;
-    if (port) {
-        opts.port = [port intValue];
+    id portVal = options ? [options objectForKey:@"port"] : nil;
+    if (portVal) {
+        port = [portVal intValue];
     }
     else {
-        opts.port = 27017;
+        port = 27017;
     }
     //NSLog(@"connecting to host %s port %d", opts.host, opts.port);
-    return mongo_connect(conn, &opts);
+	int status = mongo_client(conn, host, port);
+	
+    return status;
 }
 
 - (int) connect {
@@ -120,7 +124,7 @@ static BOOL enableUpdateTimestamps = NO;
 {
     bson *b = bson_for_object(query);
     mongo_cursor *cursor = mongo_find(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], b, 0, 0, 0, 0 );
-    return [[[NuMongoDBCursor alloc] initWithCursor:cursor] autorelease];
+    return [[NuMongoDBCursor alloc] initWithCursor:cursor];
 }
 
 - (NuMongoDBCursor *) find:(id) query inCollection:(NSString *) collection returningFields:(id) fields numberToReturn:(int) nToReturn numberToSkip:(int) nToSkip
@@ -128,7 +132,7 @@ static BOOL enableUpdateTimestamps = NO;
     bson *b = bson_for_object(query);
     bson *f = bson_for_object(fields);
     mongo_cursor *cursor = mongo_find(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], b, f, nToReturn, nToSkip, 0 );
-    return [[[NuMongoDBCursor alloc] initWithCursor:cursor] autorelease];
+    return [[NuMongoDBCursor alloc] initWithCursor:cursor];
 }
 
 - (NSMutableArray *) findArray:(id) query inCollection:(NSString *) collection
@@ -147,14 +151,14 @@ static BOOL enableUpdateTimestamps = NO;
 {
     bson *b = bson_for_object(query);
     bson bsonResult;
-    bson_bool_t result = mongo_find_one(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], b, 0, &bsonResult);
-    return result ? [[[[NuBSON alloc] initWithBSON:bsonResult] autorelease] dictionaryValue] : nil;
+    bson_bool_t result = (mongo_find_one(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], b, 0, &bsonResult) == MONGO_OK);
+    return result ? [[[NuBSON alloc] initWithBSON:bsonResult]  dictionaryValue] : nil;
 }
 
 - (id) insertObject:(id) insert intoCollection:(NSString *) collection
 {
     if (![insert objectForKey:@"_id"]) {
-        insert = [[insert mutableCopy] autorelease];
+        insert = [insert mutableCopy];
         [insert setObject:[NuBSONObjectID objectID] forKey:@"_id"];
     }
 	if (enableUpdateTimestamps) {
@@ -162,7 +166,7 @@ static BOOL enableUpdateTimestamps = NO;
 	}
     bson *b = bson_for_object(insert);
     if (b) {
-        mongo_insert(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], b);
+        mongo_insert(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], b, NULL);
         return [insert objectForKey:@"_id"];
     }
     else {
@@ -183,7 +187,7 @@ withCondition:(id) condition insertIfNecessary:(BOOL) insertIfNecessary updateMu
         mongo_update(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding],
             bcondition,
             bupdate,
-            (insertIfNecessary ? MONGO_UPDATE_UPSERT : 0) + (updateMultipleEntries ? MONGO_UPDATE_MULTI : 0));
+            (insertIfNecessary ? MONGO_UPDATE_UPSERT : 0) + (updateMultipleEntries ? MONGO_UPDATE_MULTI : 0), NULL);
     }
     else {
         NSLog(@"incomplete update: update and condition must not be nil.");
@@ -193,7 +197,7 @@ withCondition:(id) condition insertIfNecessary:(BOOL) insertIfNecessary updateMu
 - (void) removeWithCondition:(id) condition fromCollection:(NSString *) collection
 {
     bson *bcondition = bson_for_object(condition);
-    mongo_remove(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], bcondition);
+    mongo_remove(conn, [collection cStringUsingEncoding:NSUTF8StringEncoding], bcondition, NULL);
 }
 
 - (int) countWithCondition:(id) condition inCollection:(NSString *) collection inDatabase:(NSString *) database
@@ -207,7 +211,7 @@ withCondition:(id) condition insertIfNecessary:(BOOL) insertIfNecessary updateMu
     bson *bcommand = bson_for_object(command);
     bson bsonResult;
     bson_bool_t result = mongo_run_command(conn, [database cStringUsingEncoding:NSUTF8StringEncoding], bcommand, &bsonResult);
-    return result ? [[[[NuBSON alloc] initWithBSON:bsonResult] autorelease] dictionaryValue] : nil;
+    return result ? [[[NuBSON alloc] initWithBSON:bsonResult]  dictionaryValue] : nil;
 }
 
 - (BOOL) dropDatabase:(NSString *) database
