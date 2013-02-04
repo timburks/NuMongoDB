@@ -93,7 +93,7 @@ limitations under the License.
 
 @interface NuBSONBuffer : NSObject 
 {
-	bson_buffer bb;	
+	bson bb;
 }
 
 - (id) init;

@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#import <NuMongoDB/NuMongoDB.h>
+#import <NuMongoDB.h>
 
 static BOOL always_rebuild = YES;
 

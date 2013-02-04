@@ -6,7 +6,7 @@
  *  Copyright 2010 Neon Design Technology, Inc. All rights reserved.
  *
  */
-#import <NuMongoDB/NuMongoDB.h>
+#import <NuMongoDB.h>
 
 int main (int argc, const char * argv[])
 {

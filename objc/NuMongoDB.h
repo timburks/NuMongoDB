@@ -55,8 +55,7 @@ limitations under the License.
  */
 @interface NuMongoDB : NSObject
 {
-    mongo_connection conn[1];
-    mongo_connection_options opts;
+    mongo conn[1];
 }
 
 /*! Connect to a MongoDB database. Options can include @"host" and @"port". */
